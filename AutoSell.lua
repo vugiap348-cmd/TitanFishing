@@ -535,11 +535,10 @@ local function setupMarker(marker, lbl, btnShow, colorSaved, labelDone, onSaved)
     end)
 
     confirmBtn.MouseButton1Click:Connect(function()
-        -- Lay chinh xac TAM vong tron = diem se click
-        local p = marker.AbsolutePosition
-        local s = marker.AbsoluteSize
-        local cx = p.X + s.X / 2
-        local cy = p.Y + s.Y / 2
+        -- Lay vi tri con tro CHINH XAC luc bam (khong bi lech)
+        local mousePos = UserInputService:GetMouseLocation()
+        local cx = mousePos.X
+        local cy = mousePos.Y
         onSaved(Vector2.new(cx, cy))
         marker.Visible = false
         lbl.Text = labelDone
