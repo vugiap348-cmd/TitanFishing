@@ -108,48 +108,74 @@ local function doInteract()
 end
 
 -- ================================================
--- SELL ALL
+-- SELL ALL - CLICK MANH HON
 -- ================================================
+local function fireBtnAll(btn)
+    btn.MouseButton1Down:Fire()
+    task.wait(0.05)
+    btn.MouseButton1Up:Fire()
+    btn.MouseButton1Click:Fire()
+    btn.Activated:Fire()
+end
+
+local function closePopup()
+    for _, g in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
+        if g:IsA("TextButton") or g:IsA("ImageButton") then
+            local n = g.Name:lower()
+            local t = g:IsA("TextButton") and g.Text or ""
+            if n == "close" or n == "exit" or n:find("close") or n:find("exit")
+            or t == "X" or t == "x" or t == "âœ•" then
+                fireBtnAll(g)
+                return
+            end
+        end
+    end
+end
+
 local function doSellAll()
-    statusText = "Tim nut Sell All..."
-    task.wait(0.5)
-    for attempt = 1, 15 do
+    statusText = "Cho popup Sell All..."
+    task.wait(0.6)
+
+    -- Thu 20 lan, quet TOAN BO ke ca bi an
+    for attempt = 1, 20 do
         for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
-            if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
+            if gui:IsA("TextButton") or gui:IsA("ImageButton") then
                 local n = gui.Name
                 local t = gui:IsA("TextButton") and gui.Text or ""
-                if n == "SellAll" or t == "Sell All" or t == "SellAll" or n == "sellall" then
-                    gui.MouseButton1Click:Fire()
-                    statusText = "Da ban xong!"
-                    task.wait(0.5)
-                    clickBtn({"close","x","cancel","dong","exit"})
+                if n == "SellAll" or n == "Sell All"
+                or t == "Sell All" or t == "SellAll" or t == "sell all"
+                or n:lower() == "sellall" then
+                    fireBtnAll(gui)
+                    statusText = "Da click SellAll!"
+                    task.wait(0.8)
+                    closePopup()
                     return true
                 end
             end
         end
         task.wait(0.3)
     end
-    local clicked = clickBtn({"sellall","sell all","sell_all","bantattca","ban tat ca"})
-    if not clicked then
-        for _, v in ipairs(game:GetDescendants()) do
-            if v:IsA("RemoteEvent") then
-                local n = v.Name:lower()
-                if n:find("sell") then
-                    pcall(function() v:FireServer("all") end)
-                    pcall(function() v:FireServer(true) end)
-                    pcall(function() v:FireServer() end)
-                end
+
+    -- Fallback RemoteEvent
+    statusText = "Fallback sell..."
+    for _, v in ipairs(game:GetDescendants()) do
+        if v:IsA("RemoteEvent") then
+            local n = v.Name:lower()
+            if n:find("sell") then
+                pcall(function() v:FireServer("all") end)
+                pcall(function() v:FireServer(true) end)
+                pcall(function() v:FireServer() end)
             end
-            if v:IsA("RemoteFunction") then
-                if v.Name:lower():find("sell") then
-                    pcall(function() v:InvokeServer("all") end)
-                end
+        end
+        if v:IsA("RemoteFunction") then
+            if v.Name:lower():find("sell") then
+                pcall(function() v:InvokeServer("all") end)
             end
         end
     end
     task.wait(0.5)
-    clickBtn({"close","x","cancel","exit","dong"})
-    return clicked
+    closePopup()
+    return false
 end
 
 -- ================================================
