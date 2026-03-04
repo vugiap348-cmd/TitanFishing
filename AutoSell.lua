@@ -1,38 +1,26 @@
--- TITAN FISHING AUTO SELL v4
--- Teleport toi NPC -> Interact -> Sell All
+-- TITAN FISHING AUTO SELL v5
+-- Di bo toi NPC -> Ban ca -> Quay ve vi tri cau
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local PathfindingService = game:GetService("PathfindingService")
 
 local LocalPlayer = Players.LocalPlayer
 local isRunning = false
 local statusText = "Chua bat"
 local sellCount = 0
 local timer = 0
+local savedPos = nil  -- Vi tri cau da luu
 
 -- ================================================
--- DEBUG: In ra tat ca Model trong workspace
--- ================================================
-local function debugPrintNPCs()
-    print("=== DANH SACH MODEL TRONG WORKSPACE ===")
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj.Name ~= "Workspace" then
-            print("Model: " .. obj.Name)
-        end
-    end
-    print("=== HET DANH SACH ===")
-end
-
--- ================================================
--- TIM NPC (tat ca kieu)
+-- TIM NPC
 -- ================================================
 local function findNPC()
-    -- Thu tim theo ten chinh xac truoc
     local names = {
-        "Sell Fisher", "SellFisher", "Fisher", "Sell Fish",
-        "Ngu Dan", "NguDan", "Shop", "Merchant", "Dealer",
-        "FishSeller", "Fish Seller", "Fish Merchant"
+        "Grass Carp Fish", "GrassCarpFish",
+        "Sell Fisher", "SellFisher", "Fisher",
+        "Sell Fish", "Ngu Dan", "Shop", "Merchant"
     }
     for _, name in ipairs(names) do
         local found = workspace:FindFirstChild(name, true)
@@ -40,39 +28,20 @@ local function findNPC()
             return found
         end
     end
-
-    -- Tim theo keyword
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Model") then
             local n = obj.Name:lower()
-            if n:find("sell") or n:find("fish") or n:find("shop") or
-               n:find("ngu") or n:find("merchant") or n:find("dealer") then
-                -- Bo qua nhung model la player
-                local isPlayer = false
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if p.Character == obj then isPlayer = true break end
-                end
-                if not isPlayer then
+            local isPlayer = false
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Character == obj then isPlayer = true break end
+            end
+            if not isPlayer then
+                if n:find("sell") or n:find("fisher") or n:find("merchant") or n:find("dealer") then
                     return obj
                 end
             end
         end
     end
-
-    -- Tim NPC co ProximityPrompt
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("ProximityPrompt") then
-            local model = obj:FindFirstAncestorWhichIsA("Model")
-            if model then
-                local isPlayer = false
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if p.Character == model then isPlayer = true break end
-                end
-                if not isPlayer then return model end
-            end
-        end
-    end
-
     return nil
 end
 
@@ -90,17 +59,46 @@ local function getNPCPos(npc)
 end
 
 -- ================================================
--- TELEPORT TOI NPC
+-- DI BO TOI VI TRI
 -- ================================================
-local function teleportToNPC(pos)
+local function walkTo(targetPos, label)
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    -- Teleport lui 5 studs de khong stuck vao NPC
-    local offset = Vector3.new(5, 0, 5)
-    hrp.CFrame = CFrame.new(pos + offset)
-    task.wait(0.5)
+    local hum = char:FindFirstChild("Humanoid")
+    if not hrp or not hum then return end
+
+    statusText = label or "Dang di chuyen..."
+    hum.WalkSpeed = 24
+
+    local path = PathfindingService:CreatePath({
+        AgentHeight = 5, AgentRadius = 2, AgentCanJump = true,
+    })
+    local ok = pcall(function()
+        path:ComputeAsync(hrp.Position, targetPos)
+    end)
+
+    if ok and path.Status == Enum.PathStatus.Success then
+        for _, wp in ipairs(path:GetWaypoints()) do
+            if not isRunning then return end
+            if wp.Action == Enum.PathWaypointAction.Jump then
+                hum.Jump = true
+            end
+            hum:MoveTo(wp.Position)
+            hum.MoveToFinished:Wait(3)
+            -- Dung som neu da den gan
+            if (hrp.Position - targetPos).Magnitude < 8 then break end
+        end
+    else
+        -- Fallback di thang
+        hum:MoveTo(targetPos)
+        local t = 0
+        while t < 10 and isRunning do
+            task.wait(0.2)
+            t += 0.2
+            if (hrp.Position - targetPos).Magnitude < 8 then break end
+        end
+    end
 end
 
 -- ================================================
@@ -109,17 +107,17 @@ end
 local function doInteract(npc)
     statusText = "Dang interact NPC..."
 
-    -- 1. Thu fireproximityprompt
+    -- Thu ProximityPrompt tren NPC
     if npc then
         for _, v in ipairs(npc:GetDescendants()) do
             if v:IsA("ProximityPrompt") then
                 pcall(function() fireproximityprompt(v) end)
-                task.wait(0.5)
+                task.wait(0.4)
             end
         end
     end
 
-    -- 2. Thu tat ca ProximityPrompt gan nhat
+    -- ProximityPrompt gan nhat
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if hrp then
@@ -133,24 +131,23 @@ local function doInteract(npc)
                 end
             end
         end
-        if best then
+        if best and bestD < 20 then
             pcall(function() fireproximityprompt(best) end)
-            task.wait(0.5)
+            task.wait(0.4)
         end
     end
 
-    -- 3. Thu RemoteEvent
+    -- RemoteEvent
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("RemoteEvent") then
             local n = v.Name:lower()
-            if n:find("interact") or n:find("npc") or n:find("talk")
-            or n:find("shop") or n:find("open") then
+            if n:find("interact") or n:find("npc") or n:find("talk") or n:find("shop") or n:find("open") then
                 pcall(function() v:FireServer() end)
             end
         end
     end
 
-    -- 4. Thu click nut GUI Interact
+    -- Nut GUI Interact
     task.wait(0.3)
     for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
         if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
@@ -158,25 +155,24 @@ local function doInteract(npc)
             local t = gui:IsA("TextButton") and gui.Text:lower() or ""
             if n:find("interact") or t:find("interact") then
                 gui.MouseButton1Down:Fire()
-                task.wait(1)
+                task.wait(1.2)
                 gui.MouseButton1Up:Fire()
                 gui.MouseButton1Click:Fire()
             end
         end
     end
 
-    task.wait(1)
+    task.wait(0.8)
 end
 
 -- ================================================
 -- SELL ALL
 -- ================================================
 local function doSellAll()
-    statusText = "Dang bam Sell All..."
+    statusText = "Dang ban tat ca ca..."
     task.wait(0.5)
 
-    -- Thu click nut SellAll trong GUI
-    for i = 1, 8 do
+    for i = 1, 10 do
         for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
             if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
                 local n = gui.Name:lower()
@@ -217,9 +213,6 @@ end
 -- VONG LAP CHINH
 -- ================================================
 local function mainLoop()
-    -- In debug de biet NPC ten gi
-    debugPrintNPCs()
-
     while isRunning do
         local char = LocalPlayer.Character
         if not char then task.wait(1) continue end
@@ -227,36 +220,63 @@ local function mainLoop()
         local hum = char:FindFirstChild("Humanoid")
         if not hrp or not hum then task.wait(1) continue end
 
+        -- Kiem tra da luu vi tri chua
+        if not savedPos then
+            statusText = "Hay luu vi tri cau truoc!"
+            task.wait(2)
+            continue
+        end
+
         -- Tim NPC
         statusText = "Dang tim NPC..."
         local npc = findNPC()
-
         if not npc then
-            statusText = "KHONG TIM THAY NPC! Xem console (F9)"
+            statusText = "Khong tim thay NPC!"
             task.wait(3)
             continue
         end
 
-        statusText = "Tim thay: " .. npc.Name
         local npcPos = getNPCPos(npc)
         if not npcPos then task.wait(2) continue end
 
-        -- Teleport toi gan NPC
-        teleportToNPC(npcPos)
-        task.wait(0.5)
+        -- Di bo toi NPC
+        local dist = (hrp.Position - npcPos).Magnitude
+        if dist > 8 then
+            walkTo(npcPos, "Di toi NPC: " .. npc.Name)
+            task.wait(0.5)
+        end
+
+        -- Dung lai
+        hum:MoveTo(hrp.Position)
+        task.wait(0.3)
 
         -- Interact
         doInteract(npc)
-        task.wait(0.8)
-
-        -- Sell All
-        doSellAll()
         task.wait(0.5)
 
-        sellCount += 1
-        statusText = "Da ban lan " .. sellCount .. "!"
+        -- Ban ca
+        doSellAll()
+        task.wait(0.8)
 
-        -- Doi
+        sellCount += 1
+        statusText = "Da ban lan " .. sellCount .. "! Quay ve..."
+
+        -- Quay ve vi tri cau
+        task.wait(0.5)
+        walkTo(savedPos, "Dang quay ve vi tri cau...")
+        task.wait(0.5)
+
+        -- Dung lai o vi tri cau
+        local char2 = LocalPlayer.Character
+        local hum2 = char2 and char2:FindFirstChild("Humanoid")
+        local hrp2 = char2 and char2:FindFirstChild("HumanoidRootPart")
+        if hum2 and hrp2 then
+            hum2:MoveTo(hrp2.Position)
+        end
+
+        statusText = "Ve vi tri cau! Cho " .. 30 .. "s..."
+
+        -- Doi 30 giay
         timer = 30
         while timer > 0 and isRunning do
             task.wait(1)
@@ -278,8 +298,8 @@ sg.ResetOnSpawn = false
 sg.Parent = LocalPlayer.PlayerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 260, 0, 230)
-frame.Position = UDim2.new(0, 10, 0.2, 0)
+frame.Size = UDim2.new(0, 260, 0, 270)
+frame.Position = UDim2.new(0, 10, 0.15, 0)
 frame.BackgroundColor3 = Color3.fromRGB(15,15,25)
 frame.BorderSizePixel = 0
 frame.Active = true
@@ -290,6 +310,7 @@ local stroke = Instance.new("UIStroke", frame)
 stroke.Color = Color3.fromRGB(255,165,0)
 stroke.Thickness = 1.5
 
+-- Header
 local hdr = Instance.new("Frame", frame)
 hdr.Size = UDim2.new(1,0,0,40)
 hdr.BackgroundColor3 = Color3.fromRGB(200,100,0)
@@ -298,12 +319,13 @@ Instance.new("UICorner", hdr).CornerRadius = UDim.new(0,12)
 local ht = Instance.new("TextLabel", hdr)
 ht.Size = UDim2.new(1,0,1,0)
 ht.BackgroundTransparency = 1
-ht.Text = "TITAN FISHING | Auto Sell v4"
+ht.Text = "TITAN FISHING | Auto Sell v5"
 ht.TextColor3 = Color3.new(1,1,1)
 ht.Font = Enum.Font.GothamBold
 ht.TextScaled = true
 
-local function lbl(posY, col)
+-- Labels
+local function lbl(posY, col, txt)
     local l = Instance.new("TextLabel", frame)
     l.Size = UDim2.new(1,-16,0,26)
     l.Position = UDim2.new(0,8,0,posY)
@@ -312,34 +334,45 @@ local function lbl(posY, col)
     l.Font = Enum.Font.Gotham
     l.TextScaled = true
     l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Text = txt or ""
     return l
 end
 
-local sLbl = lbl(46, Color3.fromRGB(255,120,120))
-sLbl.Text = "Chua bat"
-local nLbl = lbl(74, Color3.fromRGB(255,200,100))
-nLbl.Text = "NPC: Chua tim"
-local cLbl = lbl(102, Color3.fromRGB(180,220,255))
-cLbl.Text = "Da ban: 0 lan"
-local tLbl = lbl(128, Color3.fromRGB(160,160,255))
-tLbl.Text = "Cho: --"
+local sLbl  = lbl(46,  Color3.fromRGB(255,120,120), "Chua bat")
+local posLbl = lbl(74,  Color3.fromRGB(100,255,200), "Vi tri cau: Chua luu")
+local nLbl  = lbl(102, Color3.fromRGB(255,200,100), "NPC: Chua tim")
+local cLbl  = lbl(130, Color3.fromRGB(180,220,255), "Da ban: 0 lan")
+local tLbl  = lbl(156, Color3.fromRGB(160,160,255), "Cho: --")
 
--- Debug button
-local dbgBtn = Instance.new("TextButton", frame)
-dbgBtn.Size = UDim2.new(1,-16,0,28)
-dbgBtn.Position = UDim2.new(0,8,0,156)
-dbgBtn.BackgroundColor3 = Color3.fromRGB(60,60,120)
-dbgBtn.BorderSizePixel = 0
-dbgBtn.Text = "DEBUG: In ten NPC (F9)"
-dbgBtn.TextColor3 = Color3.new(1,1,1)
-dbgBtn.Font = Enum.Font.Gotham
-dbgBtn.TextScaled = true
-Instance.new("UICorner", dbgBtn).CornerRadius = UDim.new(0,6)
-dbgBtn.MouseButton1Click:Connect(debugPrintNPCs)
+-- Nut LUU VI TRI
+local saveBtn = Instance.new("TextButton", frame)
+saveBtn.Size = UDim2.new(1,-16,0,36)
+saveBtn.Position = UDim2.new(0,8,0,186)
+saveBtn.BackgroundColor3 = Color3.fromRGB(30,120,200)
+saveBtn.BorderSizePixel = 0
+saveBtn.Text = "SAVE Vi tri cau hien tai"
+saveBtn.TextColor3 = Color3.new(1,1,1)
+saveBtn.Font = Enum.Font.GothamBold
+saveBtn.TextScaled = true
+Instance.new("UICorner", saveBtn).CornerRadius = UDim.new(0,8)
 
+saveBtn.MouseButton1Click:Connect(function()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        savedPos = hrp.Position
+        posLbl.Text = "Vi tri cau: Da luu! âœ“"
+        posLbl.TextColor3 = Color3.fromRGB(100,255,100)
+        saveBtn.BackgroundColor3 = Color3.fromRGB(20,160,60)
+        saveBtn.Text = "âœ“ Da luu vi tri cau!"
+        print("[TitanFishing] Da luu vi tri: " .. tostring(savedPos))
+    end
+end)
+
+-- Nut BAT/TAT
 local toggleBtn = Instance.new("TextButton", frame)
 toggleBtn.Size = UDim2.new(1,-16,0,36)
-toggleBtn.Position = UDim2.new(0,8,0,186)
+toggleBtn.Position = UDim2.new(0,8,0,226)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(40,180,80)
 toggleBtn.BorderSizePixel = 0
 toggleBtn.Text = "[ F ]  BAT AUTO SELL"
@@ -348,9 +381,11 @@ toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.TextScaled = true
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0,8)
 
+-- Cap nhat NPC label
 local npc = findNPC()
 nLbl.Text = "NPC: " .. (npc and npc.Name or "Chua tim")
 
+-- Update GUI
 RunService.Heartbeat:Connect(function()
     sLbl.Text = statusText
     cLbl.Text = "Da ban: " .. sellCount .. " lan"
@@ -370,19 +405,27 @@ local thread = nil
 local function toggle()
     isRunning = not isRunning
     if isRunning then
+        if not savedPos then
+            statusText = "Hay bam SAVE vi tri truoc!"
+            isRunning = false
+            return
+        end
         statusText = "Dang chay..."
         thread = task.spawn(mainLoop)
     else
         statusText = "Da tat"
         if thread then task.cancel(thread) end
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChild("Humanoid")
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hum and hrp then hum:MoveTo(hrp.Position) end
     end
 end
 
 toggleBtn.MouseButton1Click:Connect(toggle)
 UserInputService.InputBegan:Connect(function(i, gp)
     if gp then return end
-    if i.KeyCode == Settings and Settings.ToggleKey then toggle()
-    elseif i.KeyCode == Enum.KeyCode.F then toggle() end
+    if i.KeyCode == Enum.KeyCode.F then toggle() end
 end)
 
-print("[TitanFishing v4] Loaded! Nhan F de bat. Nhan DEBUG de xem ten NPC.")
+print("[TitanFishing v5] Loaded! Buoc 1: Bam SAVE. Buoc 2: Nhan F de bat!")
