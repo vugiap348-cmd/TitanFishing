@@ -108,56 +108,94 @@ local function doInteract()
 end
 
 -- ================================================
--- SELL ALL - CLICK MANH HON
+-- SELL ALL - FIX CLICK MOI LOAI NUT
 -- ================================================
-local function fireBtnAll(btn)
-    btn.MouseButton1Down:Fire()
-    task.wait(0.05)
-    btn.MouseButton1Up:Fire()
-    btn.MouseButton1Click:Fire()
-    btn.Activated:Fire()
+local VIM = game:GetService("VirtualInputManager")
+
+local function fireClick(obj)
+    -- Thu 5 cach click khac nhau
+    pcall(function() obj.MouseButton1Down:Fire() end)
+    pcall(function() obj.MouseButton1Up:Fire() end)
+    pcall(function() obj.MouseButton1Click:Fire() end)
+    pcall(function() obj.Activated:Fire() end)
+    -- Click theo vi tri tuyet doi tren man hinh
+    pcall(function()
+        local pos = obj.AbsolutePosition
+        local size = obj.AbsoluteSize
+        local cx = pos.X + size.X / 2
+        local cy = pos.Y + size.Y / 2
+        VIM:SendMouseButtonEvent(cx, cy, 0, true, game, 0)
+        task.wait(0.05)
+        VIM:SendMouseButtonEvent(cx, cy, 0, false, game, 0)
+    end)
+end
+
+local function findAndClick(keywords)
+    -- Tim trong TOAN BO PlayerGui, moi loai object
+    for _, obj in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
+        local ok = false
+        local n = obj.Name:lower()
+        -- Lay text neu co
+        local t = ""
+        pcall(function() t = obj.Text:lower() end)
+        for _, kw in ipairs(keywords) do
+            if n:find(kw) or t:find(kw) then ok = true break end
+        end
+        if ok then
+            fireClick(obj)
+            return true
+        end
+    end
+    return false
 end
 
 local function closePopup()
-    for _, g in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
-        if g:IsA("TextButton") or g:IsA("ImageButton") then
-            local n = g.Name:lower()
-            local t = g:IsA("TextButton") and g.Text or ""
-            if n == "close" or n == "exit" or n:find("close") or n:find("exit")
-            or t == "X" or t == "x" or t == "âœ•" then
-                fireBtnAll(g)
-                return
-            end
+    task.wait(0.3)
+    -- Tim nut X / Close theo nhieu cach
+    for _, obj in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
+        local n = obj.Name:lower()
+        local t = ""
+        pcall(function() t = obj.Text end)
+        if n == "close" or n == "exit" or n == "closebutton"
+        or n:find("close") or n:find("exit")
+        or t == "X" or t == "x" or t == "âœ•" or t == "âŒ" then
+            fireClick(obj)
+            task.wait(0.2)
+            return true
         end
     end
+    return false
 end
 
 local function doSellAll()
     statusText = "Cho popup Sell All..."
-    task.wait(0.6)
+    task.wait(0.8)
 
-    -- Thu 20 lan, quet TOAN BO ke ca bi an
-    for attempt = 1, 20 do
-        for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
-            if gui:IsA("TextButton") or gui:IsA("ImageButton") then
-                local n = gui.Name
-                local t = gui:IsA("TextButton") and gui.Text or ""
-                if n == "SellAll" or n == "Sell All"
-                or t == "Sell All" or t == "SellAll" or t == "sell all"
-                or n:lower() == "sellall" then
-                    fireBtnAll(gui)
-                    statusText = "Da click SellAll!"
-                    task.wait(0.8)
-                    closePopup()
-                    return true
-                end
+    -- Thu toi 25 lan (7.5 giay tong cong)
+    for attempt = 1, 25 do
+        for _, obj in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
+            local n = obj.Name
+            local t = ""
+            pcall(function() t = obj.Text end)
+
+            -- Khop CHINH XAC ten nut SellAll trong game
+            if n == "SellAll" or n == "Sell All"
+            or t == "Sell All" or t == "SellAll"
+            or t == "sell all" or n:lower() == "sellall"
+            or t:lower() == "sell all" then
+                statusText = "Da tim thay SellAll! Click..."
+                fireClick(obj)
+                task.wait(1)
+                closePopup()
+                statusText = "Da ban xong!"
+                return true
             end
         end
         task.wait(0.3)
     end
 
     -- Fallback RemoteEvent
-    statusText = "Fallback sell..."
+    statusText = "Fallback RemoteEvent sell..."
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("RemoteEvent") then
             local n = v.Name:lower()
