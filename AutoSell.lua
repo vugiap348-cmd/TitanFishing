@@ -1,5 +1,5 @@
--- TITAN FISHING AUTO SELL v5
--- Di bo toi NPC -> Ban ca -> Quay ve vi tri cau
+-- TITAN FISHING AUTO SELL v6
+-- Tu dong: Di toi NPC da luu -> Ban ca -> Quay ve vi tri cau
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -11,52 +11,8 @@ local isRunning = false
 local statusText = "Chua bat"
 local sellCount = 0
 local timer = 0
-local savedPos = nil  -- Vi tri cau da luu
-
--- ================================================
--- TIM NPC
--- ================================================
-local function findNPC()
-    local names = {
-        "Grass Carp Fish", "GrassCarpFish",
-        "Sell Fisher", "SellFisher", "Fisher",
-        "Sell Fish", "Ngu Dan", "Shop", "Merchant"
-    }
-    for _, name in ipairs(names) do
-        local found = workspace:FindFirstChild(name, true)
-        if found and (found:IsA("Model") or found:IsA("BasePart")) then
-            return found
-        end
-    end
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") then
-            local n = obj.Name:lower()
-            local isPlayer = false
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p.Character == obj then isPlayer = true break end
-            end
-            if not isPlayer then
-                if n:find("sell") or n:find("fisher") or n:find("merchant") or n:find("dealer") then
-                    return obj
-                end
-            end
-        end
-    end
-    return nil
-end
-
-local function getNPCPos(npc)
-    if npc:IsA("Model") then
-        local r = npc:FindFirstChild("HumanoidRootPart")
-            or npc:FindFirstChild("Torso")
-            or npc:FindFirstChild("Head")
-            or npc:FindFirstChildWhichIsA("BasePart")
-        if r then return r.Position end
-    elseif npc:IsA("BasePart") then
-        return npc.Position
-    end
-    return nil
-end
+local savedFishPos = nil  -- Vi tri cau ca
+local savedNPCPos = nil   -- Vi tri NPC ban ca
 
 -- ================================================
 -- DI BO TOI VI TRI
@@ -74,6 +30,7 @@ local function walkTo(targetPos, label)
     local path = PathfindingService:CreatePath({
         AgentHeight = 5, AgentRadius = 2, AgentCanJump = true,
     })
+
     local ok = pcall(function()
         path:ComputeAsync(hrp.Position, targetPos)
     end)
@@ -86,14 +43,12 @@ local function walkTo(targetPos, label)
             end
             hum:MoveTo(wp.Position)
             hum.MoveToFinished:Wait(3)
-            -- Dung som neu da den gan
             if (hrp.Position - targetPos).Magnitude < 8 then break end
         end
     else
-        -- Fallback di thang
         hum:MoveTo(targetPos)
         local t = 0
-        while t < 10 and isRunning do
+        while t < 12 and isRunning do
             task.wait(0.2)
             t += 0.2
             if (hrp.Position - targetPos).Magnitude < 8 then break end
@@ -102,20 +57,10 @@ local function walkTo(targetPos, label)
 end
 
 -- ================================================
--- INTERACT NPC
+-- INTERACT VA BAN CA
 -- ================================================
-local function doInteract(npc)
-    statusText = "Dang interact NPC..."
-
-    -- Thu ProximityPrompt tren NPC
-    if npc then
-        for _, v in ipairs(npc:GetDescendants()) do
-            if v:IsA("ProximityPrompt") then
-                pcall(function() fireproximityprompt(v) end)
-                task.wait(0.4)
-            end
-        end
-    end
+local function doInteract()
+    statusText = "Dang mo cua hang..."
 
     -- ProximityPrompt gan nhat
     local char = LocalPlayer.Character
@@ -131,13 +76,13 @@ local function doInteract(npc)
                 end
             end
         end
-        if best and bestD < 20 then
+        if best then
             pcall(function() fireproximityprompt(best) end)
-            task.wait(0.4)
+            task.wait(0.5)
         end
     end
 
-    -- RemoteEvent
+    -- RemoteEvent interact
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("RemoteEvent") then
             local n = v.Name:lower()
@@ -147,7 +92,7 @@ local function doInteract(npc)
         end
     end
 
-    -- Nut GUI Interact
+    -- Nut GUI Interact (giu)
     task.wait(0.3)
     for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
         if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
@@ -165,13 +110,11 @@ local function doInteract(npc)
     task.wait(0.8)
 end
 
--- ================================================
--- SELL ALL
--- ================================================
 local function doSellAll()
-    statusText = "Dang ban tat ca ca..."
+    statusText = "Dang bam Sell All..."
     task.wait(0.5)
 
+    -- Tim nut Sell All
     for i = 1, 10 do
         for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
             if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
@@ -190,7 +133,7 @@ local function doSellAll()
         task.wait(0.2)
     end
 
-    -- Fallback RemoteEvent
+    -- Fallback
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("RemoteEvent") then
             local n = v.Name:lower()
@@ -201,8 +144,7 @@ local function doSellAll()
             end
         end
         if v:IsA("RemoteFunction") then
-            local n = v.Name:lower()
-            if n:find("sell") then
+            if v.Name:lower():find("sell") then
                 pcall(function() v:InvokeServer("all") end)
             end
         end
@@ -220,38 +162,30 @@ local function mainLoop()
         local hum = char:FindFirstChild("Humanoid")
         if not hrp or not hum then task.wait(1) continue end
 
-        -- Kiem tra da luu vi tri chua
-        if not savedPos then
-            statusText = "Hay luu vi tri cau truoc!"
-            task.wait(2)
-            continue
+        -- Kiem tra da luu ca 2 vi tri
+        if not savedFishPos then
+            statusText = "Chua luu vi tri cau!"
+            task.wait(2) continue
+        end
+        if not savedNPCPos then
+            statusText = "Chua luu vi tri NPC!"
+            task.wait(2) continue
         end
 
-        -- Tim NPC
-        statusText = "Dang tim NPC..."
-        local npc = findNPC()
-        if not npc then
-            statusText = "Khong tim thay NPC!"
-            task.wait(3)
-            continue
-        end
+        -- Di toi NPC
+        walkTo(savedNPCPos, "Di toi NPC ban ca...")
+        task.wait(0.5)
 
-        local npcPos = getNPCPos(npc)
-        if not npcPos then task.wait(2) continue end
-
-        -- Di bo toi NPC
-        local dist = (hrp.Position - npcPos).Magnitude
-        if dist > 8 then
-            walkTo(npcPos, "Di toi NPC: " .. npc.Name)
-            task.wait(0.5)
-        end
+        if not isRunning then break end
 
         -- Dung lai
-        hum:MoveTo(hrp.Position)
+        local hum2 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        local hrp2 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hum2 and hrp2 then hum2:MoveTo(hrp2.Position) end
         task.wait(0.3)
 
         -- Interact
-        doInteract(npc)
+        doInteract()
         task.wait(0.5)
 
         -- Ban ca
@@ -262,21 +196,16 @@ local function mainLoop()
         statusText = "Da ban lan " .. sellCount .. "! Quay ve..."
 
         -- Quay ve vi tri cau
+        task.wait(0.3)
+        walkTo(savedFishPos, "Dang quay ve vi tri cau...")
         task.wait(0.5)
-        walkTo(savedPos, "Dang quay ve vi tri cau...")
-        task.wait(0.5)
 
-        -- Dung lai o vi tri cau
-        local char2 = LocalPlayer.Character
-        local hum2 = char2 and char2:FindFirstChild("Humanoid")
-        local hrp2 = char2 and char2:FindFirstChild("HumanoidRootPart")
-        if hum2 and hrp2 then
-            hum2:MoveTo(hrp2.Position)
-        end
+        -- Dung han o vi tri cau
+        local hum3 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        local hrp3 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hum3 and hrp3 then hum3:MoveTo(hrp3.Position) end
 
-        statusText = "Ve vi tri cau! Cho " .. 30 .. "s..."
-
-        -- Doi 30 giay
+        statusText = "Dang cho ban tiep..."
         timer = 30
         while timer > 0 and isRunning do
             task.wait(1)
@@ -298,8 +227,8 @@ sg.ResetOnSpawn = false
 sg.Parent = LocalPlayer.PlayerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 260, 0, 270)
-frame.Position = UDim2.new(0, 10, 0.15, 0)
+frame.Size = UDim2.new(0, 265, 0, 310)
+frame.Position = UDim2.new(0, 10, 0.1, 0)
 frame.BackgroundColor3 = Color3.fromRGB(15,15,25)
 frame.BorderSizePixel = 0
 frame.Active = true
@@ -319,73 +248,100 @@ Instance.new("UICorner", hdr).CornerRadius = UDim.new(0,12)
 local ht = Instance.new("TextLabel", hdr)
 ht.Size = UDim2.new(1,0,1,0)
 ht.BackgroundTransparency = 1
-ht.Text = "TITAN FISHING | Auto Sell v5"
+ht.Text = "TITAN FISHING | Auto Sell v6"
 ht.TextColor3 = Color3.new(1,1,1)
 ht.Font = Enum.Font.GothamBold
 ht.TextScaled = true
 
--- Labels
 local function lbl(posY, col, txt)
     local l = Instance.new("TextLabel", frame)
-    l.Size = UDim2.new(1,-16,0,26)
+    l.Size = UDim2.new(1,-16,0,24)
     l.Position = UDim2.new(0,8,0,posY)
     l.BackgroundTransparency = 1
     l.TextColor3 = col
     l.Font = Enum.Font.Gotham
     l.TextScaled = true
     l.TextXAlignment = Enum.TextXAlignment.Left
-    l.Text = txt or ""
+    l.Text = txt
     return l
 end
 
-local sLbl  = lbl(46,  Color3.fromRGB(255,120,120), "Chua bat")
-local posLbl = lbl(74,  Color3.fromRGB(100,255,200), "Vi tri cau: Chua luu")
-local nLbl  = lbl(102, Color3.fromRGB(255,200,100), "NPC: Chua tim")
-local cLbl  = lbl(130, Color3.fromRGB(180,220,255), "Da ban: 0 lan")
-local tLbl  = lbl(156, Color3.fromRGB(160,160,255), "Cho: --")
+local function makeBtn(posY, color, txt)
+    local b = Instance.new("TextButton", frame)
+    b.Size = UDim2.new(1,-16,0,36)
+    b.Position = UDim2.new(0,8,0,posY)
+    b.BackgroundColor3 = color
+    b.BorderSizePixel = 0
+    b.Text = txt
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Font = Enum.Font.GothamBold
+    b.TextScaled = true
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
+    return b
+end
 
--- Nut LUU VI TRI
-local saveBtn = Instance.new("TextButton", frame)
-saveBtn.Size = UDim2.new(1,-16,0,36)
-saveBtn.Position = UDim2.new(0,8,0,186)
-saveBtn.BackgroundColor3 = Color3.fromRGB(30,120,200)
-saveBtn.BorderSizePixel = 0
-saveBtn.Text = "SAVE Vi tri cau hien tai"
-saveBtn.TextColor3 = Color3.new(1,1,1)
-saveBtn.Font = Enum.Font.GothamBold
-saveBtn.TextScaled = true
-Instance.new("UICorner", saveBtn).CornerRadius = UDim.new(0,8)
+local sLbl   = lbl(46,  Color3.fromRGB(255,120,120), "Chua bat")
+local pos1Lbl = lbl(74,  Color3.fromRGB(100,200,255), "Vi tri cau: Chua luu")
+local pos2Lbl = lbl(100, Color3.fromRGB(255,200,100), "Vi tri NPC: Chua luu")
+local cLbl   = lbl(126, Color3.fromRGB(180,220,255), "Da ban: 0 lan")
+local tLbl   = lbl(150, Color3.fromRGB(160,160,255), "Cho: --")
 
-saveBtn.MouseButton1Click:Connect(function()
+-- Nut Save vi tri cau
+local saveFishBtn = makeBtn(178, Color3.fromRGB(30,120,220), "SAVE Vi tri cau (dung o cho cau)")
+saveFishBtn.MouseButton1Click:Connect(function()
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if hrp then
-        savedPos = hrp.Position
-        posLbl.Text = "Vi tri cau: Da luu! âœ“"
-        posLbl.TextColor3 = Color3.fromRGB(100,255,100)
-        saveBtn.BackgroundColor3 = Color3.fromRGB(20,160,60)
-        saveBtn.Text = "âœ“ Da luu vi tri cau!"
-        print("[TitanFishing] Da luu vi tri: " .. tostring(savedPos))
+        savedFishPos = hrp.Position
+        pos1Lbl.Text = "Vi tri cau: Da luu âœ“"
+        pos1Lbl.TextColor3 = Color3.fromRGB(100,255,100)
+        saveFishBtn.BackgroundColor3 = Color3.fromRGB(20,150,60)
+        saveFishBtn.Text = "âœ“ Vi tri cau da luu!"
     end
 end)
 
--- Nut BAT/TAT
-local toggleBtn = Instance.new("TextButton", frame)
-toggleBtn.Size = UDim2.new(1,-16,0,36)
-toggleBtn.Position = UDim2.new(0,8,0,226)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(40,180,80)
-toggleBtn.BorderSizePixel = 0
-toggleBtn.Text = "[ F ]  BAT AUTO SELL"
-toggleBtn.TextColor3 = Color3.new(1,1,1)
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.TextScaled = true
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0,8)
+-- Nut Save vi tri NPC
+local saveNPCBtn = makeBtn(220, Color3.fromRGB(150,80,200), "SAVE Vi tri NPC (dung o NPC)")
+saveNPCBtn.MouseButton1Click:Connect(function()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        savedNPCPos = hrp.Position
+        pos2Lbl.Text = "Vi tri NPC: Da luu âœ“"
+        pos2Lbl.TextColor3 = Color3.fromRGB(255,220,80)
+        saveNPCBtn.BackgroundColor3 = Color3.fromRGB(100,40,160)
+        saveNPCBtn.Text = "âœ“ Vi tri NPC da luu!"
+    end
+end)
 
--- Cap nhat NPC label
-local npc = findNPC()
-nLbl.Text = "NPC: " .. (npc and npc.Name or "Chua tim")
+-- Nut Bat/Tat
+local toggleBtn = makeBtn(262, Color3.fromRGB(40,180,80), "[ F ]  BAT AUTO SELL")
+toggleBtn.MouseButton1Click:Connect(function()
+    isRunning = not isRunning
+    if isRunning then
+        if not savedFishPos or not savedNPCPos then
+            statusText = "Hay luu CA 2 vi tri truoc!"
+            isRunning = false
+            return
+        end
+        statusText = "Dang chay..."
+        task.spawn(mainLoop)
+    else
+        statusText = "Da tat"
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChild("Humanoid")
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hum and hrp then hum:MoveTo(hrp.Position) end
+    end
+end)
 
--- Update GUI
+UserInputService.InputBegan:Connect(function(i, gp)
+    if gp then return end
+    if i.KeyCode == Enum.KeyCode.F then
+        toggleBtn.MouseButton1Click:Fire()
+    end
+end)
+
 RunService.Heartbeat:Connect(function()
     sLbl.Text = statusText
     cLbl.Text = "Da ban: " .. sellCount .. " lan"
@@ -401,31 +357,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-local thread = nil
-local function toggle()
-    isRunning = not isRunning
-    if isRunning then
-        if not savedPos then
-            statusText = "Hay bam SAVE vi tri truoc!"
-            isRunning = false
-            return
-        end
-        statusText = "Dang chay..."
-        thread = task.spawn(mainLoop)
-    else
-        statusText = "Da tat"
-        if thread then task.cancel(thread) end
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChild("Humanoid")
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if hum and hrp then hum:MoveTo(hrp.Position) end
-    end
-end
-
-toggleBtn.MouseButton1Click:Connect(toggle)
-UserInputService.InputBegan:Connect(function(i, gp)
-    if gp then return end
-    if i.KeyCode == Enum.KeyCode.F then toggle() end
-end)
-
-print("[TitanFishing v5] Loaded! Buoc 1: Bam SAVE. Buoc 2: Nhan F de bat!")
+print("[TitanFishing v6] Loaded!")
+print("Buoc 1: Dung o cho cau ca -> Bam SAVE Vi tri cau")
+print("Buoc 2: Di toi NPC ban ca -> Bam SAVE Vi tri NPC")
+print("Buoc 3: Nhan F de bat!")
