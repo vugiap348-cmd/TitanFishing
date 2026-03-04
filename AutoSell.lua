@@ -189,42 +189,71 @@ sg.Parent = LocalPlayer.PlayerGui
 -- NUT DANH DAU TOA DO (trong suot, keo duoc)
 -- Hien khi can danh dau, an khi khong dung
 -- ================================================
-local function taoNutDanhDau(label, color, zindex)
+local function taoNutDanhDau(color, zindex)
+    -- Vong tron chinh - hĂ¬nh trĂ²n to de keo
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 80, 0, 50)
-    btn.Position = UDim2.new(0.5, -40, 0.5, -25)
+    btn.Size = UDim2.new(0, 60, 0, 60)
+    btn.Position = UDim2.new(0.5, -30, 0.5, -30)
     btn.BackgroundColor3 = color
-    btn.BackgroundTransparency = 0.3
+    btn.BackgroundTransparency = 0.15
     btn.BorderSizePixel = 0
-    btn.Text = label
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 11
-    btn.ZIndex = zindex or 20
+    btn.Text = ""
+    btn.ZIndex = zindex or 30
     btn.Active = true
     btn.Draggable = true
     btn.Visible = false
     btn.Parent = sg
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
-    -- Vien nhap nhay
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+
+    -- Vien trang nhap nhay
     local sk = Instance.new("UIStroke", btn)
-    sk.Color = Color3.new(1,1,1)
-    sk.Thickness = 2
-    -- Mui ten chi huong
-    local arrow = Instance.new("TextLabel", btn)
-    arrow.Size = UDim2.new(1,0,0,18)
-    arrow.Position = UDim2.new(0,0,1,2)
-    arrow.BackgroundTransparency = 1
-    arrow.Text = "â–¼ KĂ‰O VĂ€O ÄĂ‚Y"
-    arrow.TextColor3 = Color3.new(1,1,0)
-    arrow.Font = Enum.Font.GothamBold
-    arrow.TextSize = 9
-    arrow.ZIndex = zindex or 20
+    sk.Color = Color3.new(1, 1, 1)
+    sk.Thickness = 3
+
+    -- Diem do chinh xac o GIUA - chi vi tri se click
+    local centerDot = Instance.new("Frame", btn)
+    centerDot.Size = UDim2.new(0, 8, 0, 8)
+    centerDot.Position = UDim2.new(0.5, -4, 0.5, -4)
+    centerDot.BackgroundColor3 = Color3.new(1, 1, 0)
+    centerDot.BorderSizePixel = 0
+    centerDot.ZIndex = zindex + 1 or 31
+    Instance.new("UICorner", centerDot).CornerRadius = UDim.new(1, 0)
+
+    -- Duong thap ngang
+    local lineH = Instance.new("Frame", btn)
+    lineH.Size = UDim2.new(0.7, 0, 0, 2)
+    lineH.Position = UDim2.new(0.15, 0, 0.5, -1)
+    lineH.BackgroundColor3 = Color3.new(1, 1, 0)
+    lineH.BorderSizePixel = 0
+    lineH.ZIndex = zindex + 1 or 31
+
+    -- Duong thap doc
+    local lineV = Instance.new("Frame", btn)
+    lineV.Size = UDim2.new(0, 2, 0.7, 0)
+    lineV.Position = UDim2.new(0.5, -1, 0.15, 0)
+    lineV.BackgroundColor3 = Color3.new(1, 1, 0)
+    lineV.BorderSizePixel = 0
+    lineV.ZIndex = zindex + 1 or 31
+
+    -- Label phia duoi
+    local lbl = Instance.new("TextLabel", btn)
+    lbl.Size = UDim2.new(0, 80, 0, 20)
+    lbl.Position = UDim2.new(0.5, -40, 1, 4)
+    lbl.BackgroundColor3 = color
+    lbl.BackgroundTransparency = 0.2
+    lbl.BorderSizePixel = 0
+    lbl.Text = "KĂ‰O & Báº¤M"
+    lbl.TextColor3 = Color3.new(1,1,1)
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 9
+    lbl.ZIndex = zindex or 30
+    Instance.new("UICorner", lbl).CornerRadius = UDim.new(0,4)
+
     return btn
 end
 
-local sellMarker = taoNutDanhDau("đŸ›’ SellAll\nKĂ‰O Äáº¾N\nNĂT NĂ€Y", Color3.fromRGB(20,150,80), 20)
-local closeMarker = taoNutDanhDau("âŒ NĂºt X\nKĂ‰O Äáº¾N\nNĂT NĂ€Y", Color3.fromRGB(180,40,60), 20)
+local sellMarker = taoNutDanhDau(Color3.fromRGB(20,200,100), 30)
+local closeMarker = taoNutDanhDau(Color3.fromRGB(220,40,60), 30)
 
 -- Nhip nhay vien
 RunService.Heartbeat:Connect(function()
@@ -497,17 +526,8 @@ scroll.CanvasSize = UDim2.new(0,0,0,510)
 -- ================================================
 local function setupMarker(marker, lbl, btnShow, colorSaved, labelDone, onSaved)
     -- Nut "DANH DAU" nho nam giua marker
-    local confirmBtn = Instance.new("TextButton", marker)
-    confirmBtn.Size = UDim2.new(1,0,0,22)
-    confirmBtn.Position = UDim2.new(0,0,0,0)
-    confirmBtn.BackgroundColor3 = Color3.new(1,1,0)
-    confirmBtn.BorderSizePixel = 0
-    confirmBtn.Text = "âœ“ DANH DAU"
-    confirmBtn.TextColor3 = Color3.new(0,0,0)
-    confirmBtn.Font = Enum.Font.GothamBold
-    confirmBtn.TextSize = 10
-    confirmBtn.ZIndex = 21
-    Instance.new("UICorner", confirmBtn).CornerRadius = UDim.new(0,6)
+    -- Nut confirm = chinh la marker (bam vao vong tron la danh dau luon)
+    local confirmBtn = marker
 
     btnShow.MouseButton1Click:Connect(function()
         marker.Visible = true
@@ -515,18 +535,17 @@ local function setupMarker(marker, lbl, btnShow, colorSaved, labelDone, onSaved)
     end)
 
     confirmBtn.MouseButton1Click:Connect(function()
-        -- Lay toa do trung tam cua marker
+        -- Lay chinh xac TAM vong tron = diem se click
         local p = marker.AbsolutePosition
         local s = marker.AbsoluteSize
-        local cx = p.X + s.X/2
-        local cy = p.Y + s.Y/2
+        local cx = p.X + s.X / 2
+        local cy = p.Y + s.Y / 2
         onSaved(Vector2.new(cx, cy))
         marker.Visible = false
         lbl.Text = labelDone
         lbl.TextColor3 = colorSaved
-        btnShow.Text = "âœ“ " .. btnShow.Text:gsub("HIEN NUT DANH DAU ", "").. " da danh dau! (bam de chinh)"
         btnShow.BackgroundColor3 = Color3.fromRGB(30,80,30)
-        statusText = "Da danh dau xong!"
+        statusText = "Da danh dau! Toa do: ("..math.floor(cx)..","..math.floor(cy)..")"
     end)
 end
 
