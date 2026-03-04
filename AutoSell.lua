@@ -1,65 +1,80 @@
 -- ================================================
--- TITAN FISHING - AUTO SELL FISH SCRIPT
--- TĂ­nh nÄƒng: Tá»± Ä‘i tá»›i NgÆ° DĂ¢n â†’ Interact â†’ BĂ¡n CĂ¡
+-- TITAN FISHING - AUTO SELL v3 FIXED
+-- Di toi "Sell Fisher" NPC -> Giu Interact -> Sell All
 -- ================================================
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local PathfindingService = game:GetService("PathfindingService")
-local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 local Humanoid = Character:WaitForChild("Humanoid")
 
--- â™ï¸ CĂ€I Äáº¶T
 local Settings = {
-    NPCName = "NgÆ° DĂ¢n",
     SellInterval = 30,
     WalkSpeed = 24,
-    InteractDistance = 8,
-    AutoWalk = true,
+    InteractDistance = 12,
     ToggleKey = Enum.KeyCode.F,
 }
 
 local isRunning = false
-local status = "Chá»..."
+local statusText = "Chua bat"
 local sellCount = 0
 local timer = 0
 
 -- ================================================
--- TĂŒM NPC
+-- TIM NPC BAN CA (Sell Fisher)
 -- ================================================
-local function findNPC()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj.Name:find(Settings.NPCName) then
-            return obj
-        end
-        if obj:IsA("BasePart") and obj.Name:find(Settings.NPCName) then
-            return obj
-        end
-    end
+local function findSellNPC()
+    -- Tim chinh xac "Sell Fisher" hoac NPC co chu "Sell" + "Fish"
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Model") then
-            local nameLower = obj.Name:lower()
-            if nameLower:find("ngu") or nameLower:find("dan") or
-               nameLower:find("fish") or nameLower:find("merchant") or
-               nameLower:find("seller") or nameLower:find("shop") then
+            local n = obj.Name:lower()
+            if n == "sell fisher" or n == "sellisher" or
+               (n:find("sell") and n:find("fish")) or
+               n:find("sell fisher") then
                 return obj
             end
         end
     end
-    return nil
+    -- Tim NPC co BillboardGui hien "Sell Fish" hoac "Sell Fisher"
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BillboardGui") or obj:IsA("TextLabel") then
+            local t = obj.Text and obj.Text:lower() or ""
+            if t:find("sell fish") or t:find("sell fisher") then
+                local model = obj:FindFirstAncestorWhichIsA("Model")
+                if model then return model end
+            end
+        end
+    end
+    -- Fallback: tim NPC co ProximityPrompt "Interact" gan nhat
+    local closest = nil
+    local closestDist = math.huge
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            local part = obj.Parent
+            if part and part:IsA("BasePart") then
+                local dist = (HumanoidRootPart.Position - part.Position).Magnitude
+                -- Chi lay NPC trong khoang 200 studs
+                if dist < 200 and dist < closestDist then
+                    closestDist = dist
+                    closest = part:FindFirstAncestorWhichIsA("Model") or part
+                end
+            end
+        end
+    end
+    return closest
 end
 
-local function getNPCPosition(npc)
+local function getNPCPos(npc)
     if npc:IsA("Model") then
-        local root = npc:FindFirstChild("HumanoidRootPart")
+        local r = npc:FindFirstChild("HumanoidRootPart")
             or npc:FindFirstChild("Torso")
             or npc:FindFirstChildWhichIsA("BasePart")
-        if root then return root.Position end
+        if r then return r.Position end
     elseif npc:IsA("BasePart") then
         return npc.Position
     end
@@ -67,260 +82,320 @@ local function getNPCPosition(npc)
 end
 
 -- ================================================
--- DI CHUYá»‚N Tá»I NPC
+-- DI CHUYEN TOI NPC
 -- ================================================
-local function walkToNPC(targetPos)
-    status = "đŸ¶ Äang Ä‘i tá»›i NgÆ° DĂ¢n..."
-
+local function walkTo(targetPos)
+    statusText = "Dang di toi Sell Fisher..."
     local path = PathfindingService:CreatePath({
-        AgentHeight = 5,
-        AgentRadius = 2,
-        AgentCanJump = true,
+        AgentHeight = 5, AgentRadius = 2, AgentCanJump = true,
     })
-
-    local success, err = pcall(function()
+    local ok = pcall(function()
         path:ComputeAsync(HumanoidRootPart.Position, targetPos)
     end)
-
-    if success and path.Status == Enum.PathStatus.Success then
-        local waypoints = path:GetWaypoints()
-        for _, waypoint in ipairs(waypoints) do
-            if not isRunning then return false end
-            if waypoint.Action == Enum.PathWaypointAction.Jump then
+    if ok and path.Status == Enum.PathStatus.Success then
+        for _, wp in ipairs(path:GetWaypoints()) do
+            if not isRunning then return end
+            if wp.Action == Enum.PathWaypointAction.Jump then
                 Humanoid.Jump = true
             end
-            Humanoid:MoveTo(waypoint.Position)
-            local reached = Humanoid.MoveToFinished:Wait(3)
-            if not reached then break end
+            Humanoid:MoveTo(wp.Position)
+            -- Dung lai neu da du gan
+            local moved = Humanoid.MoveToFinished:Wait(3)
+            local curDist = (HumanoidRootPart.Position - targetPos).Magnitude
+            if curDist <= Settings.InteractDistance then break end
         end
     else
+        -- Di thang
         Humanoid:MoveTo(targetPos)
-        Humanoid.MoveToFinished:Wait(5)
+        local t = 0
+        while t < 8 and isRunning do
+            task.wait(0.1)
+            t += 0.1
+            if (HumanoidRootPart.Position - targetPos).Magnitude <= Settings.InteractDistance then
+                break
+            end
+        end
     end
-
-    return (HumanoidRootPart.Position - targetPos).Magnitude < Settings.InteractDistance + 5
 end
 
 -- ================================================
--- CLICK NĂT INTERACT & BĂN CĂ
+-- GIU INTERACT (ProximityPrompt hoac nut GUI)
 -- ================================================
-local function clickButton(name)
-    for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
-        if gui:IsA("TextButton") or gui:IsA("ImageButton") then
-            local n = gui.Name:lower()
-            local t = (gui:IsA("TextButton") and gui.Text:lower()) or ""
-            if n:find(name:lower()) or t:find(name:lower()) then
-                if gui.Visible then
-                    gui.MouseButton1Click:Fire()
-                    gui.Activated:Fire()
-                    return true
+local function holdInteract(npc)
+    statusText = "Giu Interact..."
+
+    -- Thu fireproximityprompt tren NPC
+    if npc then
+        for _, v in ipairs(npc:GetDescendants()) do
+            if v:IsA("ProximityPrompt") then
+                pcall(function() fireproximityprompt(v) end)
+                task.wait(0.3)
+            end
+        end
+    end
+
+    -- Thu tat ca ProximityPrompt trong workspace gan nhat
+    local bestPP = nil
+    local bestDist = math.huge
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("ProximityPrompt") then
+            local part = v.Parent
+            if part and part:IsA("BasePart") then
+                local d = (HumanoidRootPart.Position - part.Position).Magnitude
+                if d < bestDist then
+                    bestDist = d
+                    bestPP = v
                 end
             end
         end
     end
-    return false
-end
+    if bestPP and bestDist < 20 then
+        pcall(function() fireproximityprompt(bestPP) end)
+        task.wait(0.5)
+    end
 
-local function pressInteract()
-    status = "đŸ¤ Äang Interact..."
+    -- Thu RemoteEvent interact
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("RemoteEvent") then
             local n = v.Name:lower()
-            if n:find("interact") or n:find("npc") or n:find("talk") then
+            if n:find("interact") or n:find("npc") or n:find("talk") or n:find("open") or n:find("shop") then
                 pcall(function() v:FireServer() end)
             end
         end
     end
-    clickButton("interact")
-    task.wait(0.5)
-end
 
-local function pressSellFish()
-    status = "đŸŸ Äang bĂ¡n cĂ¡..."
-    for _, v in ipairs(game:GetDescendants()) do
-        if v:IsA("RemoteEvent") then
-            local n = v.Name:lower()
-            if n:find("sell") or n:find("ban") or n:find("fish") then
-                pcall(function() v:FireServer() end)
-                pcall(function() v:FireServer("all") end)
+    -- Thu click nut "Interact" tren GUI
+    task.wait(0.3)
+    for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
+        if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
+            local n = gui.Name:lower()
+            local t = (gui:IsA("TextButton") and gui.Text:lower()) or ""
+            if n:find("interact") or t:find("interact") then
+                gui.MouseButton1Down:Fire()
+                task.wait(1.5)
+                gui.MouseButton1Up:Fire()
+                gui.MouseButton1Click:Fire()
+                break
             end
         end
     end
-    for _, v in ipairs(game:GetDescendants()) do
-        if v:IsA("RemoteFunction") then
-            local n = v.Name:lower()
-            if n:find("sell") or n:find("ban") then
-                pcall(function() v:InvokeServer() end)
-                pcall(function() v:InvokeServer("all") end)
-            end
-        end
-    end
-    clickButton("bĂ¡n cĂ¡")
-    clickButton("ban ca")
-    clickButton("sell")
-    clickButton("Sell All")
+
     task.wait(1)
 end
 
 -- ================================================
--- VĂ’NG Láº¶P CHĂNH
+-- CLICK SELL ALL
 -- ================================================
-local function autoSellLoop()
+local function clickSellAll()
+    statusText = "Dang bam Sell All..."
+
+    -- Doi popup hien ra
+    task.wait(0.5)
+
+    -- Tim nut "Sell All" chinh xac
+    for i = 1, 5 do -- Thu 5 lan
+        for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
+            if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
+                local n = gui.Name:lower()
+                local t = (gui:IsA("TextButton") and gui.Text:lower()) or ""
+                -- Khop "SellAll" hoac "Sell All"
+                if n == "sellall" or t == "sell all" or
+                   n:find("sellall") or t:find("sell all") or
+                   (t:find("sell") and t:find("all")) then
+                    gui.MouseButton1Click:Fire()
+                    statusText = "Da bam Sell All!"
+                    task.wait(0.5)
+                    return true
+                end
+            end
+        end
+        task.wait(0.3)
+    end
+
+    -- Fallback: thu RemoteEvent sell
+    for _, v in ipairs(game:GetDescendants()) do
+        if v:IsA("RemoteEvent") then
+            local n = v.Name:lower()
+            if n:find("sell") then
+                pcall(function() v:FireServer("all") end)
+                pcall(function() v:FireServer(true) end)
+                pcall(function() v:FireServer() end)
+            end
+        end
+        if v:IsA("RemoteFunction") then
+            local n = v.Name:lower()
+            if n:find("sell") then
+                pcall(function() v:InvokeServer("all") end)
+                pcall(function() v:InvokeServer() end)
+            end
+        end
+    end
+
+    return false
+end
+
+-- ================================================
+-- VONG LAP CHINH
+-- ================================================
+local function mainLoop()
     while isRunning do
+        -- Cap nhat character
         Character = LocalPlayer.Character
         if not Character then task.wait(1) continue end
         HumanoidRootPart = Character:FindFirstChild("HumanoidRootPart")
         Humanoid = Character:FindFirstChild("Humanoid")
         if not HumanoidRootPart or not Humanoid then task.wait(1) continue end
 
-        local npc = findNPC()
+        -- Tim NPC
+        statusText = "Dang tim Sell Fisher NPC..."
+        local npc = findSellNPC()
         if not npc then
-            status = "âŒ KhĂ´ng tĂ¬m tháº¥y NgÆ° DĂ¢n!"
+            statusText = "Khong tim thay NPC! Thu lai..."
             task.wait(3)
             continue
         end
 
-        local npcPos = getNPCPosition(npc)
+        local npcPos = getNPCPos(npc)
         if not npcPos then task.wait(2) continue end
 
+        -- Di toi NPC
         local dist = (HumanoidRootPart.Position - npcPos).Magnitude
-
-        if dist > Settings.InteractDistance and Settings.AutoWalk then
+        if dist > Settings.InteractDistance then
             Humanoid.WalkSpeed = Settings.WalkSpeed
-            walkToNPC(npcPos)
+            walkTo(npcPos)
         end
 
+        -- Dung lai dung cho
+        Humanoid:MoveTo(HumanoidRootPart.Position)
         task.wait(0.3)
-        pressInteract()
-        task.wait(0.8)
-        pressSellFish()
+
+        -- Kiem tra khoang cach lan 2
+        local dist2 = (HumanoidRootPart.Position - npcPos).Magnitude
+        if dist2 > Settings.InteractDistance + 5 then
+            statusText = "Chua toi NPC, di lai..."
+            continue
+        end
+
+        -- Giu Interact
+        holdInteract(npc)
         task.wait(0.5)
 
-        sellCount = sellCount + 1
-        status = "âœ… ÄĂ£ bĂ¡n! Chá» " .. Settings.SellInterval .. "s..."
+        -- Click Sell All
+        clickSellAll()
+        task.wait(0.5)
 
-        local waited = 0
-        while waited < Settings.SellInterval and isRunning do
+        sellCount += 1
+        statusText = "Da ban lan " .. sellCount .. "! Cho " .. Settings.SellInterval .. "s..."
+
+        -- Doi interval
+        timer = Settings.SellInterval
+        while timer > 0 and isRunning do
             task.wait(1)
-            waited = waited + 1
-            timer = Settings.SellInterval - waited
+            timer -= 1
         end
     end
-    status = "â›” ÄĂ£ táº¯t"
+    statusText = "Da tat"
 end
 
 -- ================================================
 -- GUI
 -- ================================================
+local oldGui = LocalPlayer.PlayerGui:FindFirstChild("TitanFishHub")
+if oldGui then oldGui:Destroy() end
+
 local sg = Instance.new("ScreenGui")
 sg.Name = "TitanFishHub"
 sg.ResetOnSpawn = false
 sg.Parent = LocalPlayer.PlayerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 240, 0, 200)
-frame.Position = UDim2.new(0, 20, 0.3, 0)
+frame.Size = UDim2.new(0, 250, 0, 220)
+frame.Position = UDim2.new(0, 10, 0.25, 0)
 frame.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
 frame.BorderSizePixel = 0
 frame.Active = true
 frame.Draggable = true
 frame.Parent = sg
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+local st = Instance.new("UIStroke", frame)
+st.Color = Color3.fromRGB(255, 165, 0)
+st.Thickness = 1.5
 
-local stroke = Instance.new("UIStroke", frame)
-stroke.Color = Color3.fromRGB(255, 165, 0)
-stroke.Thickness = 1.5
+-- Header
+local hdr = Instance.new("Frame", frame)
+hdr.Size = UDim2.new(1, 0, 0, 40)
+hdr.BackgroundColor3 = Color3.fromRGB(200, 100, 0)
+hdr.BorderSizePixel = 0
+Instance.new("UICorner", hdr).CornerRadius = UDim.new(0, 12)
+local htl = Instance.new("TextLabel", hdr)
+htl.Size = UDim2.new(1, 0, 1, 0)
+htl.BackgroundTransparency = 1
+htl.Text = "TITAN FISHING | Auto Sell v3"
+htl.TextColor3 = Color3.new(1,1,1)
+htl.Font = Enum.Font.GothamBold
+htl.TextScaled = true
 
-local header = Instance.new("Frame", frame)
-header.Size = UDim2.new(1, 0, 0, 40)
-header.BackgroundColor3 = Color3.fromRGB(200, 100, 0)
-header.BorderSizePixel = 0
-Instance.new("UICorner", header).CornerRadius = UDim.new(0, 12)
+-- Labels
+local function makeLabel(parent, posY, color)
+    local l = Instance.new("TextLabel", parent)
+    l.Size = UDim2.new(1, -16, 0, 26)
+    l.Position = UDim2.new(0, 8, 0, posY)
+    l.BackgroundTransparency = 1
+    l.TextColor3 = color
+    l.Font = Enum.Font.Gotham
+    l.TextScaled = true
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    return l
+end
 
-local titleLbl = Instance.new("TextLabel", header)
-titleLbl.Size = UDim2.new(1, 0, 1, 0)
-titleLbl.BackgroundTransparency = 1
-titleLbl.Text = "đŸ£  TITAN FISHING  |  Auto Sell"
-titleLbl.TextColor3 = Color3.new(1,1,1)
-titleLbl.Font = Enum.Font.GothamBold
-titleLbl.TextScaled = true
+local statusLbl = makeLabel(frame, 46, Color3.fromRGB(255,120,120))
+statusLbl.Text = "Chua bat"
 
-local statusLbl = Instance.new("TextLabel", frame)
-statusLbl.Size = UDim2.new(1, -16, 0, 28)
-statusLbl.Position = UDim2.new(0, 8, 0, 46)
-statusLbl.BackgroundTransparency = 1
-statusLbl.Text = "â›” ChÆ°a báº­t"
-statusLbl.TextColor3 = Color3.fromRGB(255, 120, 120)
-statusLbl.Font = Enum.Font.Gotham
-statusLbl.TextScaled = true
-statusLbl.TextXAlignment = Enum.TextXAlignment.Left
+local npcLbl = makeLabel(frame, 74, Color3.fromRGB(255,200,100))
+npcLbl.Text = "NPC: Sell Fisher"
 
-local npcLbl = Instance.new("TextLabel", frame)
-npcLbl.Size = UDim2.new(1, -16, 0, 24)
-npcLbl.Position = UDim2.new(0, 8, 0, 76)
-npcLbl.BackgroundTransparency = 1
-npcLbl.Text = "đŸ§ NPC: " .. Settings.NPCName
-npcLbl.TextColor3 = Color3.fromRGB(255, 200, 100)
-npcLbl.Font = Enum.Font.Gotham
-npcLbl.TextScaled = true
-npcLbl.TextXAlignment = Enum.TextXAlignment.Left
+local sellLbl = makeLabel(frame, 102, Color3.fromRGB(180,220,255))
+sellLbl.Text = "Da ban: 0 lan"
 
-local sellLbl = Instance.new("TextLabel", frame)
-sellLbl.Size = UDim2.new(1, -16, 0, 24)
-sellLbl.Position = UDim2.new(0, 8, 0, 102)
-sellLbl.BackgroundTransparency = 1
-sellLbl.Text = "đŸŸ ÄĂ£ bĂ¡n: 0 láº§n  |  â± Chá»: --"
-sellLbl.TextColor3 = Color3.fromRGB(180, 220, 255)
-sellLbl.Font = Enum.Font.Gotham
-sellLbl.TextScaled = true
-sellLbl.TextXAlignment = Enum.TextXAlignment.Left
+local timerLbl = makeLabel(frame, 128, Color3.fromRGB(160,160,255))
+timerLbl.Text = "Cho: --"
 
-local intervalLbl = Instance.new("TextLabel", frame)
-intervalLbl.Size = UDim2.new(1, -16, 0, 22)
-intervalLbl.Position = UDim2.new(0, 8, 0, 128)
-intervalLbl.BackgroundTransparency = 1
-intervalLbl.Text = "â° BĂ¡n má»—i: " .. Settings.SellInterval .. "s"
-intervalLbl.TextColor3 = Color3.fromRGB(160, 160, 255)
-intervalLbl.Font = Enum.Font.Gotham
-intervalLbl.TextScaled = true
-intervalLbl.TextXAlignment = Enum.TextXAlignment.Left
-
+-- Toggle button
 local toggleBtn = Instance.new("TextButton", frame)
-toggleBtn.Size = UDim2.new(1, -16, 0, 36)
-toggleBtn.Position = UDim2.new(0, 8, 0, 154)
+toggleBtn.Size = UDim2.new(1, -16, 0, 38)
+toggleBtn.Position = UDim2.new(0, 8, 0, 166)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
 toggleBtn.BorderSizePixel = 0
-toggleBtn.Text = "[ F ]  Báº¬T AUTO SELL"
+toggleBtn.Text = "[ F ]  BAT AUTO SELL"
 toggleBtn.TextColor3 = Color3.new(1,1,1)
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.TextScaled = true
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
 
-local thread = nil
-
-local function updateGUI()
-    statusLbl.Text = status
-    sellLbl.Text = "đŸŸ ÄĂ£ bĂ¡n: " .. sellCount .. " láº§n  |  â± " .. (isRunning and timer.."s" or "--")
+-- Update GUI
+RunService.Heartbeat:Connect(function()
+    statusLbl.Text = statusText
+    sellLbl.Text = "Da ban: " .. sellCount .. " lan"
+    timerLbl.Text = isRunning and ("Cho: " .. timer .. "s") or "Cho: --"
     if isRunning then
-        statusLbl.TextColor3 = Color3.fromRGB(100, 255, 140)
-        toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        toggleBtn.Text = "[ F ]  Táº®T AUTO SELL"
+        statusLbl.TextColor3 = Color3.fromRGB(100,255,140)
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
+        toggleBtn.Text = "[ F ]  TAT AUTO SELL"
     else
-        statusLbl.TextColor3 = Color3.fromRGB(255, 120, 120)
-        toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
-        toggleBtn.Text = "[ F ]  Báº¬T AUTO SELL"
+        statusLbl.TextColor3 = Color3.fromRGB(255,120,120)
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(40,180,80)
+        toggleBtn.Text = "[ F ]  BAT AUTO SELL"
     end
-end
+end)
 
-RunService.Heartbeat:Connect(updateGUI)
-
+local thread = nil
 local function toggle()
     isRunning = not isRunning
     if isRunning then
-        status = "đŸ”„ Äang khá»Ÿi Ä‘á»™ng..."
-        thread = task.spawn(autoSellLoop)
+        statusText = "Dang khoi dong..."
+        thread = task.spawn(mainLoop)
     else
-        status = "â›” ÄĂ£ táº¯t"
+        statusText = "Da tat"
         if thread then task.cancel(thread) end
         if Humanoid then Humanoid:MoveTo(HumanoidRootPart.Position) end
     end
@@ -332,4 +407,4 @@ UserInputService.InputBegan:Connect(function(i, gp)
     if i.KeyCode == Settings.ToggleKey then toggle() end
 end)
 
-print("[TitanFishing] âœ… Script loaded! Nháº¥n [F] Ä‘á»ƒ báº­t Auto Sell CĂ¡")
+print("[TitanFishing v3] Script loaded! Nhan F de bat!")
