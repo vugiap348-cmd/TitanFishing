@@ -1,5 +1,5 @@
--- TITAN FISHING AUTO SELL v6
--- Tu dong: Di toi NPC da luu -> Ban ca -> Quay ve vi tri cau
+-- TITAN FISHING AUTO SELL v7
+-- Fix: Click SellAll va nut X dong popup
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -11,8 +11,8 @@ local isRunning = false
 local statusText = "Chua bat"
 local sellCount = 0
 local timer = 0
-local savedFishPos = nil  -- Vi tri cau ca
-local savedNPCPos = nil   -- Vi tri NPC ban ca
+local savedFishPos = nil
+local savedNPCPos = nil
 
 -- ================================================
 -- DI BO TOI VI TRI
@@ -30,7 +30,6 @@ local function walkTo(targetPos, label)
     local path = PathfindingService:CreatePath({
         AgentHeight = 5, AgentRadius = 2, AgentCanJump = true,
     })
-
     local ok = pcall(function()
         path:ComputeAsync(hrp.Position, targetPos)
     end)
@@ -49,15 +48,38 @@ local function walkTo(targetPos, label)
         hum:MoveTo(targetPos)
         local t = 0
         while t < 12 and isRunning do
-            task.wait(0.2)
-            t += 0.2
+            task.wait(0.2); t += 0.2
             if (hrp.Position - targetPos).Magnitude < 8 then break end
         end
     end
 end
 
 -- ================================================
--- INTERACT VA BAN CA
+-- CLICK BAT KY NUT NAO THEO TEN
+-- ================================================
+local function clickBtn(keywords, holdTime)
+    for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
+        if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
+            local n = gui.Name:lower()
+            local t = gui:IsA("TextButton") and gui.Text:lower() or ""
+            for _, kw in ipairs(keywords) do
+                if n:find(kw) or t:find(kw) then
+                    if holdTime then
+                        gui.MouseButton1Down:Fire()
+                        task.wait(holdTime)
+                        gui.MouseButton1Up:Fire()
+                    end
+                    gui.MouseButton1Click:Fire()
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- ================================================
+-- INTERACT NPC
 -- ================================================
 local function doInteract()
     statusText = "Dang mo cua hang..."
@@ -76,13 +98,13 @@ local function doInteract()
                 end
             end
         end
-        if best then
+        if best and bestD < 20 then
             pcall(function() fireproximityprompt(best) end)
             task.wait(0.5)
         end
     end
 
-    -- RemoteEvent interact
+    -- RemoteEvent
     for _, v in ipairs(game:GetDescendants()) do
         if v:IsA("RemoteEvent") then
             local n = v.Name:lower()
@@ -92,63 +114,72 @@ local function doInteract()
         end
     end
 
-    -- Nut GUI Interact (giu)
+    -- Giu nut Interact tren GUI
     task.wait(0.3)
-    for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
-        if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
-            local n = gui.Name:lower()
-            local t = gui:IsA("TextButton") and gui.Text:lower() or ""
-            if n:find("interact") or t:find("interact") then
-                gui.MouseButton1Down:Fire()
-                task.wait(1.2)
-                gui.MouseButton1Up:Fire()
-                gui.MouseButton1Click:Fire()
-            end
-        end
-    end
+    clickBtn({"interact"}, 1.2)
 
     task.wait(0.8)
 end
 
+-- ================================================
+-- SELL ALL - CLICK DUNG NUT
+-- ================================================
 local function doSellAll()
-    statusText = "Dang bam Sell All..."
+    statusText = "Dang tim nut Sell All..."
     task.wait(0.5)
 
-    -- Tim nut Sell All
-    for i = 1, 10 do
+    -- Thu nhieu lan doi popup hien
+    for attempt = 1, 15 do
+        -- In debug tat ca nut dang hien
         for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
             if (gui:IsA("TextButton") or gui:IsA("ImageButton")) and gui.Visible then
-                local n = gui.Name:lower()
-                local t = gui:IsA("TextButton") and gui.Text:lower() or ""
-                if n == "sellall" or t == "sell all"
-                or (n:find("sell") and n:find("all"))
-                or (t:find("sell") and t:find("all")) then
+                local n = gui.Name
+                local t = gui:IsA("TextButton") and gui.Text or ""
+                -- Click dung ten "SellAll" (chinh xac trong game)
+                if n == "SellAll" or t == "Sell All" or t == "SellAll"
+                or n == "sellall" then
                     gui.MouseButton1Click:Fire()
-                    task.wait(0.3)
-                    statusText = "Da ban xong!"
-                    return
+                    statusText = "Da click SellAll!"
+                    task.wait(0.5)
+                    -- Dong popup neu con
+                    clickBtn({"close", "x", "cancel", "dong", "exit"}, nil)
+                    return true
                 end
             end
         end
-        task.wait(0.2)
+        task.wait(0.3)
     end
 
-    -- Fallback
-    for _, v in ipairs(game:GetDescendants()) do
-        if v:IsA("RemoteEvent") then
-            local n = v.Name:lower()
-            if n:find("sell") then
-                pcall(function() v:FireServer("all") end)
-                pcall(function() v:FireServer(true) end)
-                pcall(function() v:FireServer() end)
+    -- Fallback: tim theo keyword rong hon
+    statusText = "Thu fallback sell..."
+    local clicked = clickBtn({
+        "sellall", "sell all", "sell_all",
+        "bantattca", "ban tat ca"
+    }, nil)
+
+    if not clicked then
+        -- Fallback RemoteEvent
+        for _, v in ipairs(game:GetDescendants()) do
+            if v:IsA("RemoteEvent") then
+                local n = v.Name:lower()
+                if n:find("sell") then
+                    pcall(function() v:FireServer("all") end)
+                    pcall(function() v:FireServer(true) end)
+                    pcall(function() v:FireServer() end)
+                end
             end
-        end
-        if v:IsA("RemoteFunction") then
-            if v.Name:lower():find("sell") then
-                pcall(function() v:InvokeServer("all") end)
+            if v:IsA("RemoteFunction") then
+                if v.Name:lower():find("sell") then
+                    pcall(function() v:InvokeServer("all") end)
+                end
             end
         end
     end
+
+    task.wait(0.5)
+    -- Dong popup X neu con mo
+    clickBtn({"close", "x", "cancel", "exit", "dong"}, nil)
+    return clicked
 end
 
 -- ================================================
@@ -162,54 +193,46 @@ local function mainLoop()
         local hum = char:FindFirstChild("Humanoid")
         if not hrp or not hum then task.wait(1) continue end
 
-        -- Kiem tra da luu ca 2 vi tri
-        if not savedFishPos then
-            statusText = "Chua luu vi tri cau!"
-            task.wait(2) continue
-        end
-        if not savedNPCPos then
-            statusText = "Chua luu vi tri NPC!"
-            task.wait(2) continue
-        end
+        if not savedFishPos then statusText = "Chua luu vi tri cau!" task.wait(2) continue end
+        if not savedNPCPos then statusText = "Chua luu vi tri NPC!" task.wait(2) continue end
 
         -- Di toi NPC
         walkTo(savedNPCPos, "Di toi NPC ban ca...")
-        task.wait(0.5)
-
         if not isRunning then break end
+        task.wait(0.3)
 
         -- Dung lai
-        local hum2 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-        local hrp2 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if hum2 and hrp2 then hum2:MoveTo(hrp2.Position) end
+        local c = LocalPlayer.Character
+        local h = c and c:FindFirstChild("Humanoid")
+        local r = c and c:FindFirstChild("HumanoidRootPart")
+        if h and r then h:MoveTo(r.Position) end
         task.wait(0.3)
 
         -- Interact
         doInteract()
         task.wait(0.5)
 
-        -- Ban ca
+        -- Sell All
         doSellAll()
-        task.wait(0.8)
+        task.wait(0.5)
 
         sellCount += 1
         statusText = "Da ban lan " .. sellCount .. "! Quay ve..."
 
         -- Quay ve vi tri cau
-        task.wait(0.3)
-        walkTo(savedFishPos, "Dang quay ve vi tri cau...")
-        task.wait(0.5)
+        walkTo(savedFishPos, "Quay ve vi tri cau...")
+        if not isRunning then break end
 
-        -- Dung han o vi tri cau
-        local hum3 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
-        local hrp3 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if hum3 and hrp3 then hum3:MoveTo(hrp3.Position) end
+        -- Dung lai
+        local c2 = LocalPlayer.Character
+        local h2 = c2 and c2:FindFirstChild("Humanoid")
+        local r2 = c2 and c2:FindFirstChild("HumanoidRootPart")
+        if h2 and r2 then h2:MoveTo(r2.Position) end
 
-        statusText = "Dang cho ban tiep..."
+        statusText = "Cho ban tiep..."
         timer = 30
         while timer > 0 and isRunning do
-            task.wait(1)
-            timer -= 1
+            task.wait(1); timer -= 1
         end
     end
     statusText = "Da tat"
@@ -235,11 +258,10 @@ frame.Active = true
 frame.Draggable = true
 frame.Parent = sg
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0,12)
-local stroke = Instance.new("UIStroke", frame)
-stroke.Color = Color3.fromRGB(255,165,0)
-stroke.Thickness = 1.5
+local sk = Instance.new("UIStroke", frame)
+sk.Color = Color3.fromRGB(255,165,0)
+sk.Thickness = 1.5
 
--- Header
 local hdr = Instance.new("Frame", frame)
 hdr.Size = UDim2.new(1,0,0,40)
 hdr.BackgroundColor3 = Color3.fromRGB(200,100,0)
@@ -248,7 +270,7 @@ Instance.new("UICorner", hdr).CornerRadius = UDim.new(0,12)
 local ht = Instance.new("TextLabel", hdr)
 ht.Size = UDim2.new(1,0,1,0)
 ht.BackgroundTransparency = 1
-ht.Text = "TITAN FISHING | Auto Sell v6"
+ht.Text = "TITAN FISHING | Auto Sell v7"
 ht.TextColor3 = Color3.new(1,1,1)
 ht.Font = Enum.Font.GothamBold
 ht.TextScaled = true
@@ -266,7 +288,7 @@ local function lbl(posY, col, txt)
     return l
 end
 
-local function makeBtn(posY, color, txt)
+local function mkBtn(posY, color, txt)
     local b = Instance.new("TextButton", frame)
     b.Size = UDim2.new(1,-16,0,36)
     b.Position = UDim2.new(0,8,0,posY)
@@ -280,19 +302,19 @@ local function makeBtn(posY, color, txt)
     return b
 end
 
-local sLbl   = lbl(46,  Color3.fromRGB(255,120,120), "Chua bat")
+local sLbl    = lbl(46,  Color3.fromRGB(255,120,120), "Chua bat")
 local pos1Lbl = lbl(74,  Color3.fromRGB(100,200,255), "Vi tri cau: Chua luu")
 local pos2Lbl = lbl(100, Color3.fromRGB(255,200,100), "Vi tri NPC: Chua luu")
-local cLbl   = lbl(126, Color3.fromRGB(180,220,255), "Da ban: 0 lan")
-local tLbl   = lbl(150, Color3.fromRGB(160,160,255), "Cho: --")
+local cLbl    = lbl(126, Color3.fromRGB(180,220,255), "Da ban: 0 lan")
+local tLbl    = lbl(150, Color3.fromRGB(160,160,255), "Cho: --")
 
--- Nut Save vi tri cau
-local saveFishBtn = makeBtn(178, Color3.fromRGB(30,120,220), "SAVE Vi tri cau (dung o cho cau)")
+-- Nut luu vi tri cau
+local saveFishBtn = mkBtn(178, Color3.fromRGB(30,120,220), "SAVE Vi tri cau (dung o cho cau)")
 saveFishBtn.MouseButton1Click:Connect(function()
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        savedFishPos = hrp.Position
+    local c = LocalPlayer.Character
+    local r = c and c:FindFirstChild("HumanoidRootPart")
+    if r then
+        savedFishPos = r.Position
         pos1Lbl.Text = "Vi tri cau: Da luu âœ“"
         pos1Lbl.TextColor3 = Color3.fromRGB(100,255,100)
         saveFishBtn.BackgroundColor3 = Color3.fromRGB(20,150,60)
@@ -300,27 +322,27 @@ saveFishBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Nut Save vi tri NPC
-local saveNPCBtn = makeBtn(220, Color3.fromRGB(150,80,200), "SAVE Vi tri NPC (dung o NPC)")
+-- Nut luu vi tri NPC
+local saveNPCBtn = mkBtn(220, Color3.fromRGB(140,60,200), "SAVE Vi tri NPC (dung o NPC)")
 saveNPCBtn.MouseButton1Click:Connect(function()
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        savedNPCPos = hrp.Position
+    local c = LocalPlayer.Character
+    local r = c and c:FindFirstChild("HumanoidRootPart")
+    if r then
+        savedNPCPos = r.Position
         pos2Lbl.Text = "Vi tri NPC: Da luu âœ“"
         pos2Lbl.TextColor3 = Color3.fromRGB(255,220,80)
-        saveNPCBtn.BackgroundColor3 = Color3.fromRGB(100,40,160)
+        saveNPCBtn.BackgroundColor3 = Color3.fromRGB(90,30,140)
         saveNPCBtn.Text = "âœ“ Vi tri NPC da luu!"
     end
 end)
 
 -- Nut Bat/Tat
-local toggleBtn = makeBtn(262, Color3.fromRGB(40,180,80), "[ F ]  BAT AUTO SELL")
+local toggleBtn = mkBtn(262, Color3.fromRGB(40,180,80), "[ F ]  BAT AUTO SELL")
 toggleBtn.MouseButton1Click:Connect(function()
     isRunning = not isRunning
     if isRunning then
         if not savedFishPos or not savedNPCPos then
-            statusText = "Hay luu CA 2 vi tri truoc!"
+            statusText = "Luu CA 2 vi tri truoc!"
             isRunning = false
             return
         end
@@ -328,18 +350,16 @@ toggleBtn.MouseButton1Click:Connect(function()
         task.spawn(mainLoop)
     else
         statusText = "Da tat"
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChild("Humanoid")
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if hum and hrp then hum:MoveTo(hrp.Position) end
+        local c = LocalPlayer.Character
+        local h = c and c:FindFirstChild("Humanoid")
+        local r = c and c:FindFirstChild("HumanoidRootPart")
+        if h and r then h:MoveTo(r.Position) end
     end
 end)
 
 UserInputService.InputBegan:Connect(function(i, gp)
     if gp then return end
-    if i.KeyCode == Enum.KeyCode.F then
-        toggleBtn.MouseButton1Click:Fire()
-    end
+    if i.KeyCode == Enum.KeyCode.F then toggleBtn.MouseButton1Click:Fire() end
 end)
 
 RunService.Heartbeat:Connect(function()
@@ -357,7 +377,4 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-print("[TitanFishing v6] Loaded!")
-print("Buoc 1: Dung o cho cau ca -> Bam SAVE Vi tri cau")
-print("Buoc 2: Di toi NPC ban ca -> Bam SAVE Vi tri NPC")
-print("Buoc 3: Nhan F de bat!")
+print("[TitanFishing v7] Loaded!")
